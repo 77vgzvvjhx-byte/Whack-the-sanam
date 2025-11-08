@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Whack the Sanam!</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.min.js"></script>
+    <script type="module">
+        window.highScore = 0; 
+        window.loadHighScore = () => {};
+        window.saveHighScore = async (newScore) => {};
+        document.addEventListener('DOMContentLoaded', () => {
+            document.getElementById('user-id-display').textContent = 'User ID: (Local/Anon)';
+        });
+    </script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #1a5e2a;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 1rem;
+        }
+        .game-board {
+            width: 100%;
+            max-width: 400px;
+            aspect-ratio: 1 / 1;
+            background-color: #8B4513;
+            border: 10px solid #5d2e0a;
+            border-radius: 20px;
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.5);
+            padding: 10px;
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            grid-template-rows: repeat(3, 1fr);
+            gap: 10px;
+        }
+        .hole {
+            background-color: #3e2714;
+            border-radius: 50%;
+            position: relative;
+            overflow: hidden;
+            display: flex;
+            align-items: flex-end;
+            justify-content: center;
+            cursor: pointer;
+            box-shadow: inset 0 5px 10px rgba(0, 0, 0, 0.5);
+        }
+        .sanam {
+            position: absolute;
+            width: 90%;
+            height: 90%;
+            display: flex;
+            align-items: flex-end;
+            justify-content: center;
+            transform: translateY(100%);
+            transition: transform 0.15s ease-out;
+            cursor: pointer;
+            user-select: none;
+            pointer-events: none;
+        }
+        .sanam img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            border-radius: 50%;
+            user-select: none;
+            pointer-events: none;
+        }
+        .sanam.up {
+            transform: translateY(10%);
+            pointer-events: auto;
+        }
+        .sanam.hit {
+            opacity: 0;
+            transform: scale(0.5) translateY(-50%);
+            transition: all 0.1s ease-in;
+        }
+        .control-panel {
+            background-color: #fce1a9;
+            padding: 15px;
+            border-radius: 10px;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
+            margin-bottom: 20px;
+            width: 100%;
+            max-width: 400px;
+            text-align: center;
+        }
+        .game-button {
+            padding: 10px 20px;
+            font-size: 1.2rem;
+            font-weight: bold;
+            color: #fff;
+            background: linear-gradient(145deg, #ff4141, #cc0000);
+            border: 2px solid #990000;
+            border-radius: 10px;
+            box-shadow: 0 4px #990000, 0 8px 15px rgba(0, 0, 0, 0.3);
+            transition: all 0.1s;
+            cursor: pointer;
+            width: 100%;
+        }
+        .game-button:active {
+            box-shadow: 0 2px #990000, 0 4px 10px rgba(0, 0, 0, 0.3);
+            transform: translateY(2px);
+        }
+        .info-bar {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 10px;
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: #3e2714;
+        }
+        .message-box {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background-color: rgba(255, 255, 255, 0.95);
+            padding: 30px;
+            border-radius: 15px;
+            box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+            z-index: 100;
+            text-align: center;
+            font-size: 1.2rem;
+            font-weight: bold;
+            display: none;
+            max-width: 80vw;
+        }
+    </style>
+</head>
+<body class="bg-gray-900 flex flex-col items-center justify-center min-h-screen p-4">
+    <div id="message-box" class="message-box">
+        <h2 class="text-3xl font-bold mb-3 text-red-600">GAME OVER!</h2>
+        <img id="game-over-image" src="" alt="Game Over Screen" class="rounded-lg mb-4 mx-auto w-40 h-40 object-cover hidden">
+        <p id="message-content" class="text-xl mb-6 text-center text-gray-800"></p>
+        <button id="modal-restart-button" class="game-button w-auto px-6 py-2 text-base">Play Again</button>
+    </div>
+    <div id="user-info" class="text-xs text-white bg-black/30 p-1 rounded mb-2 w-full max-w-sm text-center">
+        <span id="user-id-display">Connecting...</span>
+    </div>
+    <div class="control-panel">
+        <h1 class="text-2xl font-extrabold text-[#3e2714] mb-3">WHACK THE SANAM!</h1>
+        <div class="info-bar">
+            <span>Score: <span id="score">0</span></span>
+            <span>Time: <span id="time-left">30</span>s</span>
+        </div>
+        <div class="info-bar">
+            <span>High Score: <span id="high-score">0</span></span>
+            <span class="text-red-600">Misses: <span id="misses-count">0</span> / 2</span>
+        </div>
+        <button id="start-button" class="game-button mt-4">Start Game</button>
+    </div>
+    <div class="game-board" id="game-board"></div>
+    <script>
+        const GAME_DURATION = 30;
+        const MAX_MISSES = 2;
+        const SANAM_IMAGE_URL = 'https://i.ibb.co/PvcSxXMG/9c9e96bb-b069-4bbf-be65-6b5c2de8bf69.jpg';
+        const GAME_OVER_IMAGE_URL = 'https://i.ibb.co/bjhXn6Mn/9c9e96bb-b069-4bbf-be65-6b5c2de8bf69.jpg';
+        const GAME_OVER_SOUND_URL = 'https://files.catbox.moe/dnk0qx.mp3';
+        let score = 0, timeLeft = GAME_DURATION, misses = 0, gameTimerId, sanamPopUpTimer, lastHole, isPlaying = false;
+        let whackSynth, gameOverPlayer; 
+        try {
+            whackSynth = new Tone.NoiseSynth({ noise: { type: 'white' }, envelope: { attack: 0.001, decay: 0.1, sustain: 0, release: 0.05 } }).toDestination();
+            gameOverPlayer = new Tone.Player({ url: GAME_OVER_SOUND_URL, autostart: false, loop: false, volume: 0 }).toDestination();
+        } catch (e) { console.error("Tone.js initialization failed:", e); }
+        const holes = [], gameBoard = document.getElementById('game-board'), scoreDisplay = document.getElementById('score'), timeLeftDisplay = document.getElementById('time-left'), missesDisplay = document.getElementById('misses-count'), startButton = document.getElementById('start-button'), messageBox = document.getElementById('message-box'), messageContent = document.getElementById('message-content'), modalRestartButton = document.getElementById('modal-restart-button'), gameOverImage = document.getElementById('game-over-image');
+        for (let i = 0; i < 9; i++) { const holeDiv = document.createElement('div'); holeDiv.className = 'hole'; const sanamDiv = document.createElement('div'); sanamDiv.className = 'sanam'; const sanamImg = document.createElement('img'); sanamImg.src = SANAM_IMAGE_URL; sanamImg.alt = 'Sanam to Whack'; sanamDiv.appendChild(sanamImg); sanamDiv.dataset.id = i; holeDiv.appendChild(sanamDiv); gameBoard.appendChild(holeDiv); holes.push({ hole: holeDiv, sanam: sanamDiv }); }
+        startButton.addEventListener('click', startGame); modalRestartButton.addEventListener('click', () => { messageBox.style.display = 'none'; startGame(); });
+        holes.forEach(item => { item.sanam.addEventListener('click', whack); item.sanam.addEventListener('touchstart', (e) => { e.preventDefault(); whack(e); }); });
+        function randomTime(min, max) { return Math.round(Math.random() * (max - min) + min); }
+        function randomHole(holes) { const index = Math.floor(Math.random() * holes.length); const holeItem = holes[index]; if (holeItem === lastHole) return randomHole(holes); lastHole = holeItem; return holeItem; }
+        function popUpSanam() { if (!isPlaying) return; const { sanam } = randomHole(holes); const time = randomTime(350, 850); sanam.classList.remove('hit'); sanam.classList.add('up'); sanamPopUpTimer = setTimeout(() => { if (sanam.classList.contains('up')) { misses++; missesDisplay.textContent = misses; if (misses >= MAX_MISSES) { sanam.classList.remove('up'); endGame('missed'); return; } } sanam.classList.remove('up'); popUpSanam(); }, time); }
+        function whack(e) { if (!e.isTrusted && e.type !== 'touchstart' || !isPlaying) return; const sanamDiv = e.currentTarget; if (sanamDiv.classList.contains('up')) { score++; scoreDisplay.textContent = score; if (whackSynth) { whackSynth.triggerAttackRelease("8n"); } sanamDiv.classList.remove('up'); sanamDiv.classList.add('hit'); clearTimeout(sanamPopUpTimer); popUpSanam(); } }
+        function countDown() { timeLeft--; timeLeftDisplay.textContent = timeLeft; if (timeLeft <= 0) { clearInterval(gameTimerId); clearTimeout(sanamPopUpTimer); endGame('time'); } }
+        async function startGame() { if (isPlaying) return; try { await Tone.start(); } catch (e) { console.error("Could not start audio context:", e); } isPlaying = true; score = 0; misses = 0; timeLeft = GAME_DURATION; scoreDisplay.textContent = score; missesDisplay.textContent = misses; timeLeftDisplay.textContent = timeLeft; startButton.textContent = 'Playing...'; startButton.disabled = true; messageBox.style.display = 'none'; gameOverImage.classList.add('hidden'); holes.forEach(item => item.sanam.classList.remove('up', 'hit')); gameTimerId = setInterval(countDown, 1000); popUpSanam(); }
+        async function endGame(reason) { isPlaying = false; startButton.textContent = 'Play Again'; startButton.disabled = false; holes.forEach(item => item.sanam.classList.remove('up', 'hit')); if (gameOverPlayer && gameOverPlayer.loaded) { gameOverPlayer.stop(); gameOverPlayer.start(); } let title = 'GAME OVER!'; let finalMessage; if (score > window.highScore) { if (window.saveHighScore) { await window.saveHighScore(score); } title = 'NEW HIGH SCORE! 🏆'; finalMessage = `You crushed it with a score of **${score}**!`; } else { finalMessage = `Final Score: **${score}**.<br>High Score to beat: **${window.highScore}**!`; } if (reason === 'missed') { title = `MISSED OUT!`; finalMessage = `You missed **${MAX_MISSES}** Sanams!<br>Final Score: **${score}**.`; } gameOverImage.src = GAME_OVER_IMAGE_URL; gameOverImage.classList.remove('hidden'); messageContent.innerHTML = finalMessage; messageBox.querySelector('h2').textContent = title; messageBox.style.display = 'block'; }
+        document.addEventListener('DOMContentLoaded', () => { startButton.disabled = false; });
+    </script>
+</body>
+</html>
